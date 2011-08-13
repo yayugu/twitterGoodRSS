@@ -15,7 +15,7 @@ require 'sinatra'
 
 require './model.rb'
 
-# set ::CONSUMER_KEY and ::CONSUMER_SECRET in this file or ENV to use OAuth
+# set ENV[CONSUMER_KEY] and ENV[CONSUMER_SECRET] in this file or another way to use OAuth
 require './env.rb' if File.exist?('./env.rb')
 
 # default:20, max:200
@@ -201,8 +201,8 @@ end
 
 def oauth_consumer
   OAuth::Consumer.new(
-    CONSUMER_KEY || ENV['CONSUMER_KEY'], 
-    CONSUMER_SECRET || ENV['CONSUMER_KEY'], 
+    ENV['CONSUMER_KEY'], 
+    ENV['CONSUMER_SECRET'], 
     site: 'http://api.twitter.com'
   )
 end
