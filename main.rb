@@ -5,12 +5,22 @@ require 'net/http'
 require 'time'
 require 'rss/maker'
 
+require 'dm-sqlite-adapter' unless ENV['DATABASE_URL']
+
 require "bundler/setup"
 require 'hashie'
+require 'oauth'
 require 'sinatra'
+
+require './model.rb'
+
 
 # default:20, max:200
 tweet_per_page = 100
+
+CONSUMER_KEY = 'p7LPfpo06UeWMxjeCY9QLg'
+CONSUMER_SECRET = 'D8W7cbKMJhyxovfDa3Yp533VSFxlTuPF08yIUKiE'
+
 
 helpers do
   include Rack::Utils
@@ -21,6 +31,16 @@ helpers do
     port = (request.port == default_port) ? "" : ":#{request.port.to_s}"
     "#{request.scheme}://#{request.host}#{port}"
   end
+
+  def oauth_consumer
+    OAuth::Consumer.new(CONSUMER_KEY, CONSUMER_SECRET, site: 'http://api.twitter.com')
+  end
+end
+
+configure do
+  enable :sessions
+  DataMapper::Logger.new($stdout, :debug)
+  DataMapper.setup(:default, ENV['DATABASE_URL'] || 'sqlite3:db.sqlite3')
 end
 
 get '/' do
@@ -35,6 +55,36 @@ listのRSS: #{base_url}/ユーザ名/list名<br>
 </html>
   EOF
 end
+
+get '/request_token' do
+  callback_url = "#{base_url}/access_token"
+  request_token = oauth_consumer.get_request_token(:oauth_callback => callback_url)
+  session[:request_token] = request_token.token
+  session[:request_token_secret] = request_token.secret
+  redirect request_token.authorize_url
+end
+
+
+get '/access_token' do
+  request_token = OAuth::RequestToken.new(oauth_consumer, session[:request_token], session[:request_token_secret])
+  begin
+    @access_token = request_token.get_access_token({},
+      :oauth_token => params[:oauth_token],
+      :oauth_verifier => params[:oauth_verifier])
+  rescue OAuth::Unauthorized => @exception
+    return erb %{oauth failed: <%=h @exception.message %>}
+  end
+  @screen_name = get_screen_name(@access_token)
+  
+  Account.create(
+    screen_name: @screen_name,
+    access_token: @access_token.token,
+    access_secret: @access_token.secret
+  )
+
+  "success"
+end
+
 
 # list
 get '/:name/:slug' do |name, slug|
