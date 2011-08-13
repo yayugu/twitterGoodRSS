@@ -4,6 +4,7 @@ require 'json'
 require 'net/http'
 require 'time'
 require 'rss/maker'
+require 'uri'
 
 require 'dm-sqlite-adapter' unless ENV['DATABASE_URL']
 
@@ -14,13 +15,11 @@ require 'sinatra'
 
 require './model.rb'
 
+# set ::CONSUMER_KEY and ::CONSUMER_SECRET in this file or ENV to use OAuth
+require './env.rb' if File.exist?('./env.rb')
 
 # default:20, max:200
 tweet_per_page = 100
-
-CONSUMER_KEY = 'p7LPfpo06UeWMxjeCY9QLg'
-CONSUMER_SECRET = 'D8W7cbKMJhyxovfDa3Yp533VSFxlTuPF08yIUKiE'
-
 
 helpers do
   include Rack::Utils
@@ -30,10 +29,6 @@ helpers do
     default_port = (request.scheme == "http") ? 80 : 443
     port = (request.port == default_port) ? "" : ":#{request.port.to_s}"
     "#{request.scheme}://#{request.host}#{port}"
-  end
-
-  def oauth_consumer
-    OAuth::Consumer.new(CONSUMER_KEY, CONSUMER_SECRET, site: 'http://api.twitter.com')
   end
 end
 
@@ -48,16 +43,21 @@ get '/' do
 <html>
 <title>TwitterGoodRSS</title>
 <h1>TwitterGoodRSS</h1>
-標準よりましなRSSを生成します。さらにlistのRSSを生成することもできます。<br>
-ユーザのRSS: #{base_url}/ユーザ名<br>
-listのRSS: #{base_url}/ユーザ名/list名<br>
-どちらもTwitterのURLの後ろの方をコピペするといいんじゃないでしょうか
+標準よりましなRSSを生成します。さらに公式ではできないListのRSSの生成もできます。<br>
+OAuth認証をするとidが生成されるので、<br>
+ユーザのRSS: #{base_url}/id/ユーザ名<br>
+listのRSS: #{base_url}/id/ユーザ名/list名<br>
+でRSSを取得できます。<br>
+どちらもTwitterのURLの後ろの方をコピペするといいんじゃないでしょうか。<br>
+ブックマークレットもあります。<br>
+
+<a href="#{base_url}/auth" style="font-size:20pt">登録する</a>
 </html>
   EOF
 end
 
-get '/request_token' do
-  callback_url = "#{base_url}/access_token"
+get '/auth' do
+  callback_url = "#{base_url}/callback"
   request_token = oauth_consumer.get_request_token(:oauth_callback => callback_url)
   session[:request_token] = request_token.token
   session[:request_token_secret] = request_token.secret
@@ -65,7 +65,7 @@ get '/request_token' do
 end
 
 
-get '/access_token' do
+get '/callback' do
   request_token = OAuth::RequestToken.new(oauth_consumer, session[:request_token], session[:request_token_secret])
   begin
     @access_token = request_token.get_access_token({},
@@ -75,22 +75,43 @@ get '/access_token' do
     return erb %{oauth failed: <%=h @exception.message %>}
   end
   @screen_name = get_screen_name(@access_token)
+
+  # 重複しない&RandomなKeyを生成
+  begin
+    @id = rand(10**20 - 1)
+  end while Account.get(@id)
   
   Account.create(
+    id: "%19d" % [@id],
     screen_name: @screen_name,
     access_token: @access_token.token,
     access_secret: @access_token.secret
   )
 
-  "success"
+  bookmarklet = URI.encode "javascript:void(function(){location.href = '#{base_url}/#{@id}' + location.href.match(/[a-zA-Z0-9\_\/]+$/);})();"
+  <<-EOF
+<html>
+<title>TwitterGoodRSS</title>
+<h1>TwitterGoodRSS</h1>
+ユーザのRSS: #{base_url}/#{@id}/ユーザ名<br>
+listのRSS: #{base_url}/#{@id}/ユーザ名/list名<br>
+でRSSを取得できます。<br>
+どちらもTwitterのURLの後ろの方をコピペするといいんじゃないでしょうか。<br>
+一応ブックマークレットもあります。<br>
+<a href="#{bookmarklet}">
+ブックマークレット
+</a>
+</html>
+  EOF
 end
 
 
 # list
-get '/:name/:slug' do |name, slug|
-  res = Net::HTTP.get('api.twitter.com',
-                      "/1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}")
-  res = JSON.parse(res, object_class: Hashie::Mash)
+get '/:id/:name/:slug' do |id, name, slug|
+  account = Account.get!(id)
+  res = OAuth::AccessToken.new(oauth_consumer, account.access_token, account.access_secret)
+  .get("http://api.twitter.com/1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}")
+  res = JSON.parse(res.body, object_class: Hashie::Mash)
   rss = RSS::Maker.make('2.0') do |maker|
     maker.channel.title = "#{slug} / #{name} / Twitter"
     maker.channel.description = ' '
@@ -101,10 +122,11 @@ get '/:name/:slug' do |name, slug|
   rss.to_s
 end
 
-get '/:name' do |name|
-  res = Net::HTTP.get('api.twitter.com',
-                      "/1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true")
-  res = JSON.parse(res, object_class: Hashie::Mash)
+get '/:id/:name' do |id, name|
+  account = Account.get!(id)
+  res = OAuth::AccessToken.new(oauth_consumer, account.access_token, account.access_secret)
+  .get("http://api.twitter.com/1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true")
+  res = JSON.parse(res.body, object_class: Hashie::Mash)
   rss = RSS::Maker.make('2.0') do |maker|
     maker.channel.title = "#{name} / Twitter"
     maker.channel.description = ' '
@@ -173,5 +195,17 @@ module MarkupTweet
   end
 end
 
+def get_screen_name(access_token)
+    JSON.parse(access_token.get("http://api.twitter.com/1/account/verify_credentials.json").body)['screen_name']
+end
 
+def oauth_consumer
+  OAuth::Consumer.new(
+    CONSUMER_KEY || ENV['CONSUMER_KEY'], 
+    CONSUMER_SECRET || ENV['CONSUMER_KEY'], 
+    site: 'http://api.twitter.com'
+  )
+end
 
+def access_token_form_id
+end
