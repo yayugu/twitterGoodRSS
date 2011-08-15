@@ -22,6 +22,12 @@ require './env.rb' if File.exist?('./env.rb')
 # default:20, max:200
 tweet_per_page = 100
 
+configure do
+  enable :sessions
+  DataMapper::Logger.new($stdout, :debug)
+  DataMapper.setup(:default, ENV['DATABASE_URL'] || 'sqlite3:db.sqlite3')
+end
+
 helpers do
   include Rack::Utils
   alias_method :h, :escape_html
@@ -31,12 +37,43 @@ helpers do
     port = (request.port == default_port) ? "" : ":#{request.port.to_s}"
     "#{request.scheme}://#{request.host}#{port}"
   end
-end
 
-configure do
-  enable :sessions
-  DataMapper::Logger.new($stdout, :debug)
-  DataMapper.setup(:default, ENV['DATABASE_URL'] || 'sqlite3:db.sqlite3')
+  class String
+    def json_parse(*a, &b)
+      JSON.parse(self, *a, &b)
+    end
+  end
+
+  def make_items(maker, res)
+    res.each do |tweet|
+      text = markup_tweet(tweet)
+
+      item = maker.items.new_item
+      item.title = tweet.user.screen_name
+      item.link = "http://twitter.com/#{tweet.user.screen_name}/status/#{tweet['id']}"
+      item.description = " <img src='#{tweet.user.profile_image_url}' /> #{text} "
+      item.date = Time.parse(tweet.created_at)
+    end
+  end
+
+  def screen_name(access_token)
+    access_token.get("http://api.twitter.com/1/account/verify_credentials.json").body.json_parse['screen_name']
+  end
+
+  def oauth_consumer
+    OAuth::Consumer.new(
+      ENV['CONSUMER_KEY'], 
+      ENV['CONSUMER_SECRET'], 
+      site: 'http://api.twitter.com'
+    )
+  end
+
+  def oauth_get_and_json_parse(url, account)
+    OAuth::AccessToken.new(oauth_consumer, account.access_token, account.access_secret)
+    .get(url)
+    .body
+    .json_parse(object_class: Hashie::Mash)
+  end
 end
 
 get '/' do
@@ -65,13 +102,14 @@ get '/auth' do
   redirect request_token.authorize_url
 end
 
-
 get '/callback' do
   request_token = OAuth::RequestToken.new(oauth_consumer, session[:request_token], session[:request_token_secret])
   begin
-    @access_token = request_token.get_access_token({},
+    @access_token = request_token.get_access_token(
+      {},
       :oauth_token => params[:oauth_token],
-      :oauth_verifier => params[:oauth_verifier])
+      :oauth_verifier => params[:oauth_verifier]
+    )
   rescue OAuth::Unauthorized => @exception
     return erb %{oauth failed: <%=h @exception.message %>}
   end
@@ -81,7 +119,7 @@ get '/callback' do
   begin
     @id = rand(10**20 - 1)
   end while Account.get(@id)
-  
+
   Account.create(
     id: "%19d" % [@id],
     screen_name: @screen_name,
@@ -107,76 +145,34 @@ TwitterGoodRSS
   EOF
 end
 
-# search
-get '/:id/search/:query' do |id, query|
-  account = Account.get!(id)
-  res = OAuth::AccessToken.new(oauth_consumer, account.access_token, account.access_secret)
-  .get("http://search.twitter.com/search.json?q=#{URI.encode query}")
-  res = JSON.parse(res.body, object_class: Hashie::Mash)
-  rss = RSS::Maker.make('2.0') do |maker|
-    maker.channel.title = "#{query} / Search / Twitter"
-    maker.channel.description = ' '
-    maker.channel.link = "http://twitter.com/search?q=#{URI.encode query}"
-    maker.items.do_sort = true
-    parse_and_make_items(maker, res)
-  end
-  rss.to_s
-end
-
 # list
 get '/:id/:name/:slug' do |id, name, slug|
-  account = Account.get!(id)
-  res = OAuth::AccessToken.new(oauth_consumer, account.access_token, account.access_secret)
-  .get("http://api.twitter.com/1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}")
-  res = JSON.parse(res.body, object_class: Hashie::Mash)
-  rss = RSS::Maker.make('2.0') do |maker|
+  res = oauth_get_and_json_parse(
+    "http://api.twitter.com/1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}",
+    Account.get!(id)
+  )
+  RSS::Maker.make('2.0') do |maker|
     maker.channel.title = "#{slug} / #{name} / Twitter"
     maker.channel.description = ' '
     maker.channel.link = "http://twitter.com/list/#{name}/#{slug}"
     maker.items.do_sort = true
-    parse_and_make_items(maker, res)
-  end
-  rss.to_s
+    make_items(maker, res)
+  end.to_s
 end
 
 # user_timeline
 get '/:id/:name' do |id, name|
-  account = Account.get!(id)
-  res = OAuth::AccessToken.new(oauth_consumer, account.access_token, account.access_secret)
-  .get("http://api.twitter.com/1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true")
-  res = JSON.parse(res.body, object_class: Hashie::Mash)
-  rss = RSS::Maker.make('2.0') do |maker|
+  res = oauth_get_and_json_parse(
+    "http://api.twitter.com/1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true",
+    Account.get!(id)
+  )
+  RSS::Maker.make('2.0') do |maker|
     maker.channel.title = "#{name} / Twitter"
     maker.channel.description = ' '
     maker.channel.link = "http://twitter.com/#{name}"
     maker.image.title = "#{name}'s icon"
     maker.image.url = res.first.user.profile_image_url
     maker.items.do_sort = true
-    parse_and_make_items(maker, res)
-  end
-  rss.to_s
-end
-
-def parse_and_make_items(maker, res)
-  res.each do |tweet|
-    text = markup_tweet(tweet)
-
-    item = maker.items.new_item
-    item.title = tweet.user.screen_name
-    item.link = "http://twitter.com/#{tweet.user.screen_name}/status/#{tweet['id']}"
-    item.description = " <img src='#{tweet.user.profile_image_url}' /> #{text} "
-    item.date = Time.parse(tweet.created_at)
-  end
-end
-
-def screen_name(access_token)
-  JSON.parse(access_token.get("http://api.twitter.com/1/account/verify_credentials.json").body)['screen_name']
-end
-
-def oauth_consumer
-  OAuth::Consumer.new(
-    ENV['CONSUMER_KEY'], 
-    ENV['CONSUMER_SECRET'], 
-    site: 'http://api.twitter.com'
-  )
+    make_items(maker, res)
+  end.to_s
 end
