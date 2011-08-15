@@ -75,7 +75,7 @@ get '/callback' do
   rescue OAuth::Unauthorized => @exception
     return erb %{oauth failed: <%=h @exception.message %>}
   end
-  @screen_name = get_screen_name(@access_token)
+  @screen_name = screen_name(@access_token)
 
   # 重複しない&RandomなKeyを生成
   begin
@@ -107,6 +107,21 @@ TwitterGoodRSS
   EOF
 end
 
+# search
+get '/:id/search/:query' do |id, query|
+  account = Account.get!(id)
+  res = OAuth::AccessToken.new(oauth_consumer, account.access_token, account.access_secret)
+  .get("http://search.twitter.com/search.json?q=#{URI.encode query}")
+  res = JSON.parse(res.body, object_class: Hashie::Mash)
+  rss = RSS::Maker.make('2.0') do |maker|
+    maker.channel.title = "#{query} / Search / Twitter"
+    maker.channel.description = ' '
+    maker.channel.link = "http://twitter.com/search?q=#{URI.encode query}"
+    maker.items.do_sort = true
+    parse_and_make_items(maker, res)
+  end
+  rss.to_s
+end
 
 # list
 get '/:id/:name/:slug' do |id, name, slug|
@@ -154,7 +169,7 @@ def parse_and_make_items(maker, res)
   end
 end
 
-def get_screen_name(access_token)
+def screen_name(access_token)
   JSON.parse(access_token.get("http://api.twitter.com/1/account/verify_credentials.json").body)['screen_name']
 end
 
