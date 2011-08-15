@@ -14,6 +14,7 @@ require 'oauth'
 require 'sinatra'
 
 require './model.rb'
+require './markup_tweet.rb'
 
 # set ENV[CONSUMER_KEY] and ENV[CONSUMER_SECRET] in this file or another way to use OAuth
 require './env.rb' if File.exist?('./env.rb')
@@ -93,13 +94,14 @@ get '/callback' do
 <html>
 <title>TwitterGoodRSS</title>
 <h1>TwitterGoodRSS</h1>
+あなたのidは<b>#{@id}</b>です<br>
 ユーザのRSS: #{base_url}/#{@id}/ユーザ名<br>
 listのRSS: #{base_url}/#{@id}/ユーザ名/list名<br>
 でRSSを取得できます。<br>
-どちらもTwitterのURLの後ろの方をコピペするといいんじゃないでしょうか。<br>
-一応ブックマークレットもあります。<br>
+どちらもTwitterのURLの後ろの方をコピペするといいんじゃないでしょうか<br>
+一応ブックマークレットもあります↓<br>
 <a href="#{bookmarklet}">
-ブックマークレット
+TwitterGoodRSS
 </a>
 </html>
   EOF
@@ -122,6 +124,7 @@ get '/:id/:name/:slug' do |id, name, slug|
   rss.to_s
 end
 
+# user_timeline
 get '/:id/:name' do |id, name|
   account = Account.get!(id)
   res = OAuth::AccessToken.new(oauth_consumer, account.access_token, account.access_secret)
@@ -141,7 +144,7 @@ end
 
 def parse_and_make_items(maker, res)
   res.each do |tweet|
-    text = MarkupTweet(tweet)
+    text = markup_tweet(tweet)
 
     item = maker.items.new_item
     item.title = tweet.user.screen_name
@@ -151,52 +154,8 @@ def parse_and_make_items(maker, res)
   end
 end
 
-def MarkupTweet(tweet)
-  text = tweet.text
-  entities = tweet.entities
-  MarkupTweet::markup_media(text, entities)
-  MarkupTweet::markup_urls(text, entities)
-  MarkupTweet::markup_user_mentions(text, entities)
-  MarkupTweet::markup_hashtags(text, entities)
-  text
-end
-
-module MarkupTweet
-  # see https://dev.twitter.com/docs/tweet-entities
-  def self.markup_media(text, entities)
-    return text unless entities['media']
-    entities.media.each do |image|
-      text << "<div><a href='#{image.display_url}'><img src='#{image.media_url}' /></a></div>"
-    end
-    text
-  end
-
-  def self.markup_urls(text, entities)
-    entities.urls.each do |url|
-      new_url = url.expanded_url || url.url
-      text.gsub!(url.url, "<a href='#{new_url}'>#{new_url}</a>")
-    end
-    text
-  end
-
-  def self.markup_user_mentions(text, entities)
-    entities.user_mentions.each do |mention|
-      text.gsub!("@#{mention.screen_name}", "<a href='http://twitter.com/#{mention.screen_name}'>@#{mention.screen_name}</a>")
-    end
-    text
-  end
-
-
-  def self.markup_hashtags(text, entities)
-    entities.hashtags.each do |hashtag|
-      text.gsub!(/[\#＃♯]#{Regexp.quote hashtag.text}/, "<a href='http://twitter.com/search?q=%23#{hashtag.text}'>##{hashtag.text}</a>")
-    end
-    text
-  end
-end
-
 def get_screen_name(access_token)
-    JSON.parse(access_token.get("http://api.twitter.com/1/account/verify_credentials.json").body)['screen_name']
+  JSON.parse(access_token.get("http://api.twitter.com/1/account/verify_credentials.json").body)['screen_name']
 end
 
 def oauth_consumer
@@ -205,7 +164,4 @@ def oauth_consumer
     ENV['CONSUMER_SECRET'], 
     site: 'http://api.twitter.com'
   )
-end
-
-def access_token_form_id
 end
