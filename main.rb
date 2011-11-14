@@ -25,6 +25,7 @@ tweet_per_page = 100
 configure do
   enable :sessions
   DataMapper::Logger.new($stdout, :debug)
+  DataMapper.finalize
   DataMapper.setup(:default, ENV['DATABASE_URL'] || 'sqlite3:db.sqlite3')
 end
 
@@ -51,7 +52,7 @@ helpers do
       item = maker.items.new_item
       item.title = tweet.user.screen_name
       item.link = "http://twitter.com/#{tweet.user.screen_name}/status/#{tweet['id']}"
-      item.description = " <img src='#{tweet.user.profile_image_url}' /> #{text} "
+      item.description = " <img src='#{tweet.user.profile_image_url}' width='16px' height='16px' /> #{text} "
       item.date = Time.parse(tweet.created_at)
     end
   end
