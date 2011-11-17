@@ -148,7 +148,7 @@ end
 
 # list
 get '/:id/:name/:slug' do |id, name, slug|
-  content_type 'text/xml', :charset => 'utf-8'
+  content_type 'application/rss+xml', :charset => 'utf-8'
 
   res = oauth_get_and_json_parse(
     "http://api.twitter.com/1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}",
