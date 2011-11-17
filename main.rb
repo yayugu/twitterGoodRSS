@@ -165,6 +165,8 @@ end
 
 # user_timeline
 get '/:id/:name' do |id, name|
+  content_type 'application/rss+xml', :charset => 'utf-8'
+
   res = oauth_get_and_json_parse(
     "http://api.twitter.com/1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true",
     Account.get!(id)
