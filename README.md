@@ -21,8 +21,8 @@ Done!
 ### local or normal server
     git clone git://github.com/yayugu/twitterGoodRSS.git
     cd TwitterGoodRSS
-    echo "env['CONSUMER_KEY] = '******'" >> env.rb
-    echo "env['CONSUMER_SECRET] = '******'" >> env.rb
+    echo "ENV['CONSUMER_KEY'] = '******'" >> env.rb
+    echo "ENV['CONSUMER_SECRET'] = '******'" >> env.rb
     rake db:migrate
 Done!
 
