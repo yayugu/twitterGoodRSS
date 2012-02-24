@@ -54,6 +54,7 @@ helpers do
       item.link = "http://twitter.com/#{tweet.user.screen_name}/status/#{tweet['id']}"
       item.description = " <img src='#{tweet.user.profile_image_url}' width='16px' height='16px' /> #{text} "
       item.date = Time.parse(tweet.created_at)
+      item.author = tweet.source.gsub(/<\/?[^>]*>/, "")
     end
   end
 
