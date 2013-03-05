@@ -96,7 +96,7 @@ listのRSS: #{base_url}/id/ユーザ名/list名<br>
 <br>
 <br>
 <br>
-<a href="http://d.hatena.ne.jp/yayugu/20110818">詳しい説明</a>
+<a href="http://d.hatena.ne.jp/yayugu/20110818/1313627722">詳しい説明</a>
 <a href="https://github.com/yayugu/twitterGoodRSS">GitHub</a>
 </html>
   EOF
