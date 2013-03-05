@@ -129,7 +129,7 @@ get '/callback' do
     access_secret: @access_token.secret
   )
 
-  bookmarklet = URI.encode "javascript:void(function(){location.href = '#{base_url}/#{@id}' + location.href.match(/[a-zA-Z0-9\_\\-\/]+$/);})();"
+  bookmarklet = URI.encode "javascript:void(function(){location.href = '#{base_url}/#{@id}' + location.pathname;})();"
   <<-EOF
 <html>
 <title>TwitterGoodRSS</title>
