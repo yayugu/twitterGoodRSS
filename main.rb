@@ -59,7 +59,7 @@ helpers do
   end
 
   def screen_name(access_token)
-    access_token.get("http://api.twitter.com/1/account/verify_credentials.json").body.json_parse['screen_name']
+    access_token.get("http://api.twitter.com/1.1/account/verify_credentials.json").body.json_parse['screen_name']
   end
 
   def oauth_consumer
@@ -152,7 +152,7 @@ get '/:id/:name/:slug' do |id, name, slug|
   content_type 'application/rss+xml', :charset => 'utf-8'
 
   res = oauth_get_and_json_parse(
-    "http://api.twitter.com/1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}",
+    "http://api.twitter.com/1.1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}",
     Account.get!(id)
   )
   RSS::Maker.make('2.0') do |maker|
@@ -169,7 +169,7 @@ get '/:id/:name' do |id, name|
   content_type 'application/rss+xml', :charset => 'utf-8'
 
   res = oauth_get_and_json_parse(
-    "http://api.twitter.com/1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true",
+    "http://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true",
     Account.get!(id)
   )
   RSS::Maker.make('2.0') do |maker|
