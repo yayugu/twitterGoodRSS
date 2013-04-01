@@ -4,6 +4,7 @@ gem 'dm-postgres-adapter', '1.2.0'
 gem 'sinatra'
 gem 'hashie'
 gem 'oauth'
+gem 'haml'
 
 group :development do
   gem 'dm-sqlite-adapter', '1.2.0'

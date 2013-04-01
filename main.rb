@@ -3,7 +3,6 @@
 require 'json'
 require 'net/http'
 require 'time'
-require 'rss/maker'
 require 'uri'
 
 require 'dm-sqlite-adapter' unless ENV['DATABASE_URL']
@@ -12,6 +11,7 @@ require "bundler/setup"
 require 'hashie'
 require 'oauth'
 require 'sinatra'
+require 'haml'
 
 require './model.rb'
 require './markup_tweet.rb'
@@ -45,16 +45,17 @@ helpers do
     end
   end
 
-  def make_items(maker, res)
-    res.each do |tweet|
+  def make_items(res)
+    res.map do |tweet|
       text = markup_tweet(tweet)
 
-      item = maker.items.new_item
+      item = Hashie::Mash.new
       item.title = tweet.user.screen_name
       item.link = "http://twitter.com/#{tweet.user.screen_name}/status/#{tweet['id']}"
       item.description = " <img src='#{tweet.user.profile_image_url}' width='16px' height='16px' /> #{text} "
-      item.date = Time.parse(tweet.created_at)
+      item.pub_date = tweet.created_at
       item.author = tweet.source.gsub(/<\/?[^>]*>/, "")
+      item
     end
   end
 
@@ -161,13 +162,10 @@ get '/:id/:name/:slug' do |id, name, slug|
     "http://api.twitter.com/1.1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}",
     Account.get!(id)
   )
-  RSS::Maker.make('2.0') do |maker|
-    maker.channel.title = "#{slug} / #{name} / Twitter"
-    maker.channel.description = ' '
-    maker.channel.link = "http://twitter.com/list/#{name}/#{slug}"
-    maker.items.do_sort = true
-    make_items(maker, res)
-  end.to_s
+  @title = "#{slug} / #{name} / Twitter"
+  @link = "http://twitter.com/list/#{name}/#{slug}"
+  @items = make_items(res)
+  haml :rss
 end
 
 # user_timeline
@@ -178,13 +176,10 @@ get '/:id/:name' do |id, name|
     "http://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true",
     Account.get!(id)
   )
-  RSS::Maker.make('2.0') do |maker|
-    maker.channel.title = "#{name} / Twitter"
-    maker.channel.description = ' '
-    maker.channel.link = "http://twitter.com/#{name}"
-    maker.image.title = "#{name}'s icon"
-    maker.image.url = res.first.user.profile_image_url
-    maker.items.do_sort = true
-    make_items(maker, res)
-  end.to_s
+  @title = "#{name} / Twitter"
+  @link = "http://twitter.com/#{name}"
+  @image_title = "#{name}'s icon"
+  @image_url = res.first.user.profile_image_url
+  @items = make_items(res)
+  haml :rss
 end

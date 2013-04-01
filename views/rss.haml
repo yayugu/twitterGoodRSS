@@ -1,0 +1,20 @@
+!!! XML
+%rss(version='2.0'
+     xmlns:content='http://purl.org/rss/1.0/modules/content/')
+  %channel
+    %title= @title
+    %link= @link
+    %description= ' '
+    - if @image_url
+      %image
+        %url= @image_url
+        %title= @image_title
+        %link= @link
+    - @items.each do |item|
+      %item
+        %title= item.title
+        %link= item.link
+        %description= h item.description
+        %author= item.author
+        %pubDate= item.pub_date
+    
