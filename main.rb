@@ -51,7 +51,7 @@ helpers do
 
       item = Hashie::Mash.new
       item.title = tweet.user.screen_name
-      item.link = "http://twitter.com/#{tweet.user.screen_name}/status/#{tweet['id']}"
+      item.link = "https://twitter.com/#{tweet.user.screen_name}/status/#{tweet['id']}"
       item.description = " <img src='#{tweet.user.profile_image_url}' width='16px' height='16px' /> #{text} "
       item.pub_date = tweet.created_at
       item.author = tweet.source.gsub(/<\/?[^>]*>/, "")
@@ -159,7 +159,7 @@ get '/:id/:name/:slug' do |id, name, slug|
   content_type 'application/rss+xml', :charset => 'utf-8'
 
   res = oauth_get_and_json_parse(
-    "http://api.twitter.com/1.1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}",
+    "https://api.twitter.com/1.1/lists/statuses.json?slug=#{slug}&owner_screen_name=#{name}&include_entities=true&per_page=#{tweet_per_page}",
     Account.get!(id)
   )
   @title = "#{slug} / #{name} / Twitter"
@@ -173,7 +173,7 @@ get '/:id/:name' do |id, name|
   content_type 'application/rss+xml', :charset => 'utf-8'
 
   res = oauth_get_and_json_parse(
-    "http://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true",
+    "https://api.twitter.com/1.1/statuses/user_timeline.json?screen_name=#{name}&include_entities=true&count=#{tweet_per_page}&include_rts=true",
     Account.get!(id)
   )
   @title = "#{name} / Twitter"
